@@ -1,0 +1,79 @@
+name: Backend Quality Gate
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  release:
+    types: [published]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure report directories exist
+        run: |
+          mkdir -p backend/reports/unit \
+                   backend/reports/integration \
+                   backend/reports/contract \
+                   backend/reports/performance \
+                   backend/reports/security
+
+      - name: Unit tests (service/engine)
+        run: |
+          echo "Implement command at project level, e.g.:"
+          echo "pytest backend/tests/unit --junitxml=backend/reports/unit/junit.xml --cov=backend/service --cov-report=xml:backend/reports/unit/coverage.xml"
+
+      - name: Integration tests (repository/migration/transaction)
+        run: |
+          echo "Implement command at project level, e.g.:"
+          echo "pytest backend/tests/integration --junitxml=backend/reports/integration/junit.xml"
+
+      - name: Contract tests (OpenAPI)
+        run: |
+          echo "Implement command at project level, e.g.:"
+          echo "pytest backend/tests/contract --junitxml=backend/reports/contract/junit.xml"
+
+      - name: Performance tests (critical scenarios)
+        run: |
+          echo "Implement command at project level, e.g.:"
+          echo "k6 run backend/tests/performance/critical.js --summary-export backend/reports/performance/summary.json"
+
+      - name: Security checks
+        run: |
+          echo "Implement command at project level, e.g.:"
+          echo "pytest backend/tests/security --junitxml=backend/reports/security/junit.xml"
+
+      - name: Enforce service layer coverage >= 85%
+        run: |
+          echo "Implement parser/check to fail when service coverage < 85%"
+          echo "Example: python scripts/check_coverage.py backend/reports/unit/coverage.xml 85"
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report-${{ github.run_id }}
+          path: backend/reports/
+
+  attach-reports-to-release:
+    if: github.event_name == 'release'
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-test-report-${{ github.run_id }}
+          path: backend/reports/
+
+      - name: Archive reports
+        run: tar -czf backend-test-reports.tgz backend/reports
+
+      - name: Upload report archive to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: backend-test-reports.tgz
