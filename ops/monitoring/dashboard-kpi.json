@@ -1,0 +1,155 @@
+{
+  "title": "Mokmok MVP - Ops KPI Dashboard",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["mvp", "ops", "kpi"],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(http_requests_total, service)",
+        "current": {"text": "all", "value": ".*"},
+        "includeAll": true,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Availability (7d)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "(1 - (sum(increase(service_downtime_seconds_total{service=~\"$service\"}[7d])) / (7 * 24 * 3600))) * 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 99.5},
+              {"color": "green", "value": 99.9}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Error Rate (5m)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{service=~\"$service\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{service=~\"$service\"}[5m])) * 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "red", "value": 1.0}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "API Latency P95 / P99",
+      "type": "timeseries",
+      "targets": [
+        {
+          "legendFormat": "P95",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=~\"$service\"}[5m])) by (le)) * 1000"
+        },
+        {
+          "legendFormat": "P99",
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{service=~\"$service\"}[5m])) by (le)) * 1000"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 450},
+              {"color": "orange", "value": 900},
+              {"color": "red", "value": 1400}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Queue Delay",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "max(queue_oldest_message_age_seconds{service=~\"$service\"})"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 30},
+              {"color": "red", "value": 90}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "DB Health",
+      "type": "timeseries",
+      "targets": [
+        {"legendFormat": "Pool Usage %", "expr": "db_pool_in_use_connections / db_pool_max_connections * 100"},
+        {"legendFormat": "Slow Query P95 (ms)", "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le)) * 1000"},
+        {"legendFormat": "Replication Lag (s)", "expr": "db_replication_lag_seconds"}
+      ]
+    },
+    {
+      "title": "Cache Hit Ratio",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "sum(rate(cache_hits_total[5m])) / (sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m]))) * 100"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 75},
+              {"color": "green", "value": 85}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Product KPI",
+      "type": "table",
+      "targets": [
+        {"expr": "product_retention_d1_percent"},
+        {"expr": "product_retention_d7_percent"},
+        {"expr": "product_retention_d30_percent"},
+        {"expr": "product_quick_mode_ratio_percent"},
+        {"expr": "product_detailed_mode_ratio_percent"},
+        {"expr": "product_stats_tab_view_ratio_percent"}
+      ]
+    }
+  ]
+}
