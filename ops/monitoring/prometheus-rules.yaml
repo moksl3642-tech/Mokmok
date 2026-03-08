@@ -1,0 +1,99 @@
+groups:
+  - name: mokmok-recording-rules
+    interval: 30s
+    rules:
+      - record: service:http_request_rate_5m
+        expr: sum by (service) (rate(http_requests_total[5m]))
+
+      - record: service:http_latency_p50_seconds_5m
+        expr: histogram_quantile(0.50, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: service:http_latency_p95_seconds_5m
+        expr: histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: service:http_latency_p99_seconds_5m
+        expr: histogram_quantile(0.99, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: service:http_error_rate_5m
+        expr: |
+          sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum by (service) (rate(http_requests_total[5m])), 1e-9)
+
+      - record: service:queue_lag_p95_seconds_5m
+        expr: quantile by (service) (0.95, queue_consumer_lag_seconds)
+
+      - record: service:db_pool_usage_ratio
+        expr: |
+          sum by (service) (db_pool_in_use_connections)
+          /
+          clamp_min(sum by (service) (db_pool_max_connections), 1)
+
+      - record: service:cache_hit_ratio_5m
+        expr: |
+          sum by (service) (rate(cache_requests_total{result="hit"}[5m]))
+          /
+          clamp_min(sum by (service) (rate(cache_requests_total[5m])), 1e-9)
+
+  - name: mokmok-alert-rules
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: service:http_error_rate_5m > 0.03
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "High 5xx error rate for {{ $labels.service }}"
+          description: "Error rate > 3% for 10m. Check runbook docs/ops/runbook-incident.md"
+
+      - alert: HighLatencyP95
+        expr: service:http_latency_p95_seconds_5m > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High p95 latency for {{ $labels.service }}"
+          description: "p95 latency > 800ms for 10m. Investigate DB/Redis saturation and queue backlog."
+
+      - alert: HighLatencyP99
+        expr: service:http_latency_p99_seconds_5m > 1.5
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "High p99 latency for {{ $labels.service }}"
+          description: "p99 latency > 1.5s for 10m. Trigger incident response."
+
+      - alert: QueueLagTooHigh
+        expr: service:queue_lag_p95_seconds_5m > 60
+        for: 15m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Queue lag elevated for {{ $labels.service }}"
+          description: "Queue lag p95 > 60s for 15m. Scale workers or inspect downstream dependencies."
+
+      - alert: DBPoolSaturation
+        expr: service:db_pool_usage_ratio > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "DB pool near saturation for {{ $labels.service }}"
+          description: "DB pool usage > 90% for 5m. Consider connection leak, slow queries, or scaling DB."
+
+      - alert: LowCacheHitRatio
+        expr: service:cache_hit_ratio_5m < 0.70
+        for: 20m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Cache hit ratio degraded for {{ $labels.service }}"
+          description: "Cache hit ratio < 70% for 20m. Review key TTL, eviction and warm-up strategy."
