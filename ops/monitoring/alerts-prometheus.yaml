@@ -1,0 +1,113 @@
+groups:
+  - name: mokmok-slo-alerts
+    rules:
+      - alert: APIAvailabilityLowWarning
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"2..|3..",route!="/healthz"}[5m]))
+            /
+            sum(rate(http_requests_total{route!="/healthz"}[5m]))
+          ) < 0.9995
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "API availability below warning threshold"
+          description: "Availability < 99.95% in last 10m"
+
+      - alert: APIAvailabilityLowCritical
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"2..|3..",route!="/healthz"}[5m]))
+            /
+            sum(rate(http_requests_total{route!="/healthz"}[5m]))
+          ) < 0.9990
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "API availability below SLO"
+          description: "Availability < 99.90% in last 10m"
+
+      - alert: APIErrorRateHigh
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5..",route!="/healthz"}[5m]))
+            /
+            sum(rate(http_requests_total{route!="/healthz"}[5m]))
+          ) > 0.001
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "API error rate above SLO"
+          description: "Error rate > 0.10% in last 10m"
+
+      - alert: APILatencyP95High
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{route!="/healthz"}[5m])) by (le)
+          ) > 0.3
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "API p95 latency high"
+          description: "p95 latency > 300ms in last 15m"
+
+      - alert: APILatencyP99High
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(http_request_duration_seconds_bucket{route!="/healthz"}[5m])) by (le)
+          ) > 0.8
+        for: 15m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "API p99 latency high"
+          description: "p99 latency > 800ms in last 15m"
+
+      - alert: DBErrorRateHigh
+        expr: |
+          sum(rate(db_request_errors_total[5m])) / sum(rate(db_requests_total[5m])) > 0.0005
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "DB error rate high"
+          description: "DB timeout/error rate > 0.05% in last 10m"
+
+      - alert: CacheHitRatioLow
+        expr: |
+          sum(rate(cache_hits_total[5m]))
+          /
+          (sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m]))) < 0.92
+        for: 20m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Cache hit ratio below SLO"
+          description: "Cache hit ratio < 92% in last 20m"
+
+      - alert: QueueLagHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(queue_message_lag_seconds_bucket[5m])) by (le)
+          ) > 60
+        for: 10m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Queue lag high"
+          description: "Queue lag p95 > 60s in last 10m"
