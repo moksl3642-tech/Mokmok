@@ -132,3 +132,9 @@ def permission_matrix() -> dict[str, dict[str, str]]:
         "/admin/system/config": {"anonymous": "deny", "user": "deny", "admin": "allow+audit"},
         "/admin/audit-logs": {"anonymous": "deny", "user": "deny", "admin": "allow"},
     }
+from fastapi import FastAPI
+
+from app.api.v1.routers.game import router as game_router
+
+app = FastAPI(title="Mokmok Backend")
+app.include_router(game_router, prefix="/api/v1")
