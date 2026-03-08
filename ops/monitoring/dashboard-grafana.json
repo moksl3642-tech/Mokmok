@@ -1,0 +1,81 @@
+{
+  "title": "Mokmok - Stability SLO Dashboard",
+  "uid": "mokmok-slo-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["slo", "reliability", "ops"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Availability (5m)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"2..|3..\",route!=\"/healthz\"}[5m])) / sum(rate(http_requests_total{route!=\"/healthz\"}[5m]))",
+          "legendFormat": "availability"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error Rate (5m)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\",route!=\"/healthz\"}[5m])) / sum(rate(http_requests_total{route!=\"/healthz\"}[5m]))",
+          "legendFormat": "error_rate"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Latency p95/p99 (5m)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route!=\"/healthz\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{route!=\"/healthz\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "DB Timeout/Error Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(db_request_errors_total[5m])) / sum(rate(db_requests_total[5m]))",
+          "legendFormat": "db_error_rate"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Cache Hit Ratio",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(cache_hits_total[5m])) / (sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m])))",
+          "legendFormat": "cache_hit_ratio"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Queue Lag p95",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(queue_message_lag_seconds_bucket[5m])) by (le))",
+          "legendFormat": "queue_lag_p95"
+        }
+      ]
+    }
+  ]
+}
