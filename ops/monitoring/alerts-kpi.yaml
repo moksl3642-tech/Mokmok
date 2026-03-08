@@ -1,0 +1,103 @@
+groups:
+  - name: mokmok-mvp-kpi-alerts
+    interval: 30s
+    rules:
+      - alert: AvailabilityBelowTarget
+        expr: (1 - (sum(increase(service_downtime_seconds_total[1h])) / 3600)) * 100 < 99.9
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Availability thấp hơn mục tiêu MVP"
+          description: "Availability 1h < 99.9%. Kiểm tra lỗi deploy, network hoặc downstream service."
+
+      - alert: ErrorRateHighWarning
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100 > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Error rate vượt ngưỡng warning"
+
+      - alert: ErrorRateHighCritical
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100 > 1.0
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "Error rate vượt ngưỡng critical"
+
+      - alert: LatencyP95High
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000 > 450
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "P95 latency vượt 450ms"
+
+      - alert: LatencyP99High
+        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000 > 900
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "P99 latency vượt 900ms"
+
+      - alert: QueueDelayHigh
+        expr: max(queue_oldest_message_age_seconds) > 30
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Queue delay vượt 30s"
+
+      - alert: QueueDelayCritical
+        expr: max(queue_oldest_message_age_seconds) > 90
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "Queue delay vượt 90s"
+
+      - alert: DBPoolUsageHigh
+        expr: db_pool_in_use_connections / db_pool_max_connections * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "DB pool usage > 80%"
+
+      - alert: DBSlowQueryP95High
+        expr: histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le)) * 1000 > 120
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "DB slow query p95 > 120ms"
+
+      - alert: DBReplicationLagHigh
+        expr: db_replication_lag_seconds > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "DB replication lag > 2s"
+
+      - alert: CacheHitRatioLow
+        expr: sum(rate(cache_hits_total[5m])) / (sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m]))) * 100 < 85
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Cache hit ratio < 85%"

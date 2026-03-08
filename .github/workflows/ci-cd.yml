@@ -1,0 +1,159 @@
+name: CI-CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+      - release/*
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository }}
+  IMAGE_TAG_SHA: sha-${{ github.sha }}
+  IMAGE_TAG_SEMVER: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+
+jobs:
+  versioning:
+    name: Build version metadata
+    runs-on: ubuntu-latest
+    outputs:
+      short_sha: ${{ steps.vars.outputs.short_sha }}
+      image_tag_sha: ${{ steps.vars.outputs.image_tag_sha }}
+      image_tag_semver: ${{ steps.vars.outputs.image_tag_semver }}
+    steps:
+      - id: vars
+        name: Compute artifact tags
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_TAG_SHA="sha-${SHORT_SHA}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            IMAGE_TAG_SEMVER="${GITHUB_REF_NAME}"
+          else
+            IMAGE_TAG_SEMVER="none"
+          fi
+
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_tag_sha=${IMAGE_TAG_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_tag_semver=${IMAGE_TAG_SEMVER}" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    needs: versioning
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build frontend
+        run: |
+          echo "Build frontend"
+          echo "frontend-image:${{ needs.versioning.outputs.image_tag_sha }}"
+          echo "frontend-image:${{ needs.versioning.outputs.image_tag_semver }}"
+      - name: Test frontend
+        run: echo "Run frontend tests"
+      - name: Security scan frontend
+        run: echo "Run frontend SAST/dependency scan"
+
+  backend:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    needs: versioning
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend
+        run: |
+          echo "Build backend"
+          echo "backend-image:${{ needs.versioning.outputs.image_tag_sha }}"
+          echo "backend-image:${{ needs.versioning.outputs.image_tag_semver }}"
+      - name: Test backend
+        run: echo "Run backend tests"
+      - name: Security scan backend
+        run: echo "Run backend SAST/dependency scan"
+
+  db_migration_precheck:
+    name: DB migration pre-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pre-check migration
+        run: .github/actions/scripts/migration.sh precheck
+
+  db_migration_dryrun:
+    name: DB migration dry-run
+    runs-on: ubuntu-latest
+    needs: db_migration_precheck
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dry-run migration
+        run: .github/actions/scripts/migration.sh dry-run
+
+  db_migration_apply:
+    name: DB migration apply (staging)
+    runs-on: ubuntu-latest
+    needs: [frontend, backend, db_migration_dryrun]
+    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply migration
+        run: .github/actions/scripts/migration.sh apply
+
+  db_migration_verify:
+    name: DB migration verify
+    runs-on: ubuntu-latest
+    needs: db_migration_apply
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify migration
+        run: .github/actions/scripts/migration.sh verify
+
+  deploy_staging:
+    name: Deploy staging
+    runs-on: ubuntu-latest
+    needs: [frontend, backend, db_migration_verify]
+    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: staging
+      url: https://staging.example.com
+    steps:
+      - name: Deploy to staging
+        run: |
+          echo "Deploy frontend/backend with tags"
+          echo "${{ needs.versioning.outputs.image_tag_sha }}"
+          echo "${{ needs.versioning.outputs.image_tag_semver }}"
+
+  deploy_production:
+    name: Deploy production (requires approval)
+    runs-on: ubuntu-latest
+    needs: [deploy_staging]
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: https://example.com
+    steps:
+      - name: Deploy to production
+        run: |
+          echo "Deploy production release: ${{ github.ref_name }}"
+          echo "Approval gate enforced by protected environment: production"
+
+  rollback_drill:
+    name: Rollback rehearsal
+    runs-on: ubuntu-latest
+    needs: deploy_production
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+    steps:
+      - name: Simulate rollback
+        run: |
+          echo "Rollback to previous stable release"
+          echo "Record MTTR in docs/release/ci-cd-evidence.md"
